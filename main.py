@@ -14,21 +14,49 @@ from simulation import (
     experiment_base_vs_fear, experiment_fear_sweep,
     experiment_memory_sweep, experiment_bifurcation_fear,
     experiment_bifurcation_K, experiment_phase_portrait,
-    compute_steady_state, detect_oscillation
+    compute_steady_state, detect_oscillation,
+    estimate_period, experiment_stability_map
 )
 from visualization import (
     plot_time_series, plot_comparison, plot_phase_portrait,
     plot_phase_multi, plot_fear_sweep_time, plot_bifurcation,
     plot_memory_time, plot_steady_state_vs_fear,
-    plot_nullclines
+    plot_nullclines, plot_stability_map
 )
 from analysis import (
     find_equilibria_base, find_equilibria_fear, stability,
-    load_lynx_hare_data, sensitivity_analysis, fit_model_to_data
+    load_lynx_hare_data, sensitivity_analysis, fit_model_to_data,
+    check_hopf
 )
 
 os.makedirs('pics', exist_ok=True)
 SHOW = '--show' in sys.argv
+
+
+# ============================================================
+# Experiment 0: Equilibrium stability verification
+# ============================================================
+
+def run_exp0():
+    """Compute equilibria and eigenvalues for base and fear models."""
+    print("=" * 60)
+    print("Experiment 0: Equilibrium Stability Analysis")
+    print("=" * 60)
+
+    params = dict(r=DEFAULT_R, K=DEFAULT_K, a=DEFAULT_A,
+                  h=DEFAULT_H, e=DEFAULT_E, d=DEFAULT_D)
+
+    print("\n  Base model:")
+    for x, y in find_equilibria_base(**params):
+        st = stability((x, y), model='base', **params)
+        lam = np.round(st['eigenvalues'], 4)
+        print(f"    E=({x:.4f}, {y:.4f})  [{st['type']}]  λ={lam}")
+
+    print(f"\n  Fear model (f={DEFAULT_F}):")
+    for x, y in find_equilibria_fear(**params, f=DEFAULT_F):
+        st = stability((x, y), model='fear', **params, f=DEFAULT_F)
+        lam = np.round(st['eigenvalues'], 4)
+        print(f"    E=({x:.4f}, {y:.4f})  [{st['type']}]  λ={lam}")
 
 
 # ============================================================
@@ -50,8 +78,6 @@ def run_exp1():
     print("  -> pics/exp1_base_vs_fear.pdf")
 
     # Report steady states
-    _, _, _, _, _, _, _, _ = compute_steady_state(z_base)
-    _, _, _, _, _, _, _, _ = compute_steady_state(z_fear)
     outcome_base = detect_oscillation(z_base)
     outcome_fear = detect_oscillation(z_fear)
     print(f"  Base model: {outcome_base}")
@@ -95,6 +121,30 @@ def run_exp2():
         outcome = detect_oscillation(results[i][1])
         print(f"  f={fv:.1f}: x_ss={means_x[i]:.3f}±{stds_x[i]:.3f}, "
               f"y_ss={means_y[i]:.3f}±{stds_y[i]:.3f} [{outcome}]")
+
+    # Oscillation period vs fear intensity
+    import matplotlib.pyplot as plt
+    from visualization import COLORS
+    periods = [estimate_period(t, z) for t, z in results]
+    valid = [(fv, T) for fv, T in zip(f_values, periods) if not np.isnan(T)]
+    if valid:
+        fv_arr, T_arr = zip(*valid)
+        fig, ax = plt.subplots(figsize=(6, 4))
+        ax.plot(fv_arr, T_arr, 'o-', color=COLORS['prey'], markersize=6)
+        ax.set_xlabel('Fear Intensity f')
+        ax.set_ylabel('Natural Period T')
+        ax.set_title('Oscillation Period vs Fear Intensity')
+        ax.grid(True, alpha=0.3)
+        fig.tight_layout()
+        fig.savefig('pics/exp2_period_vs_f.pdf')
+        if SHOW:
+            plt.show()
+        else:
+            plt.close(fig)
+        print("  -> pics/exp2_period_vs_f.pdf")
+        for fv, T in zip(fv_arr, T_arr):
+            print(f"  f={fv:.1f}: T={T:.2f}")
+
     return results, f_values
 
 
@@ -209,6 +259,36 @@ def run_exp5():
                      title='Bifurcation Diagram: Carrying Capacity K',
                      filename='exp5_bifurcation_K.pdf', show=SHOW)
     print("  -> pics/exp5_bifurcation_K.pdf")
+
+    # Hopf bifurcation detection: scan f for stability type transitions
+    params = dict(r=DEFAULT_R, K=DEFAULT_K, a=DEFAULT_A,
+                  h=DEFAULT_H, e=DEFAULT_E, d=DEFAULT_D)
+    f_scan = np.linspace(0.0, 5.0, 40)
+    hopf_data = check_hopf(f_vals=f_scan, **params)
+
+    print("\n  Hopf bifurcation scan (coexistence equilibrium):")
+    prev_type = None
+    for rec in hopf_data:
+        stype = rec['type']
+        if stype != prev_type:
+            print(f"    f={rec['f']:.2f}  E=({rec['x']:.3f}, {rec['y']:.3f})"
+                  f"  Re(λ)_max={rec['real_max']:+.4f}  [{stype}]")
+            prev_type = stype
+
+    # 2D stability map: f × K parameter space
+    print("\n  Computing 2D stability map (f × K)...")
+    f_range = np.linspace(0.0, 5.0, 20)
+    K_range = np.linspace(2.0, 20.0, 20)
+    outcomes = experiment_stability_map(f_range, K_range)
+
+    plot_stability_map(outcomes, f_range, K_range,
+                       title='Stability Regions in f–K Parameter Space',
+                       filename='exp5_stability_map.pdf', show=SHOW)
+    print("  -> pics/exp5_stability_map.pdf")
+
+    unique, counts = np.unique(outcomes, return_counts=True)
+    for u, c in zip(unique, counts):
+        print(f"    {u}: {c} / {outcomes.size} grid points")
 
     return
 
@@ -361,6 +441,7 @@ def main():
     print("Math Modeling Experiment - All Experiments")
     print("=" * 60)
 
+    run_exp0()   # Equilibrium stability
     run_exp1()   # Base vs Fear
     run_exp2()   # Fear sweep
     run_exp3()   # Memory effect

@@ -202,6 +202,69 @@ def experiment_phase_portrait(model_name='fear', f_values=None):
     return results
 
 
+def estimate_period(t, z, col=0):
+    """Estimate natural oscillation period via FFT on the transient.
+
+    Uses the first 70% of the time series to capture damped oscillations
+    before they vanish into the steady state.
+    Returns NaN if no clear oscillation is detected.
+    """
+    n = int(len(t) * 0.7)
+    x = z[:n, col]
+    dt_val = t[1] - t[0]
+
+    x_centered = x - np.mean(x)
+    if np.std(x_centered) < 1e-3:
+        return np.nan
+
+    spectrum = np.abs(np.fft.rfft(x_centered))
+    freqs = np.fft.rfftfreq(len(x_centered), d=dt_val)
+
+    if len(freqs) < 2:
+        return np.nan
+
+    dominant_idx = np.argmax(spectrum[1:]) + 1   # skip DC
+    dominant_freq = freqs[dominant_idx]
+    return 1.0 / dominant_freq if dominant_freq > 1e-10 else np.nan
+
+
+def experiment_stability_map(f_range, K_range):
+    """Analytically classify stability in f × K parameter space.
+
+    Uses Jacobian eigenvalues at the coexistence equilibrium — much faster
+    and more accurate than ODE-based burn-in for slowly-damped stable foci.
+
+    Returns
+    -------
+    outcomes : ndarray of str, shape (len(K_range), len(f_range))
+        Each cell is one of: 'stable focus', 'unstable (limit cycle)',
+        'predator extinct'.
+    """
+    from analysis import find_equilibria_fear, stability as stab
+
+    outcomes = np.empty((len(K_range), len(f_range)), dtype=object)
+
+    for i, K in enumerate(K_range):
+        for j, f in enumerate(f_range):
+            params = dict(r=DEFAULT_R, K=K, a=DEFAULT_A,
+                          h=DEFAULT_H, e=DEFAULT_E, d=DEFAULT_D)
+            eqs = find_equilibria_fear(**params, f=f)
+            coex = [(x, y) for x, y in eqs if x > 0.01 and y > 0.01]
+
+            if not coex:
+                outcomes[i, j] = 'predator extinct'
+            else:
+                x_star, y_star = coex[0]
+                st = stab((x_star, y_star), model='fear', **params, f=f)
+                re_max = np.max(np.real(st['eigenvalues']))
+                if re_max > 1e-6:
+                    outcomes[i, j] = 'unstable (limit cycle)'
+                else:
+                    outcomes[i, j] = 'stable focus'
+
+    return outcomes
+
+
 if __name__ == '__main__':
     os.makedirs('pics', exist_ok=True)
     t, z_base, z_fear = experiment_base_vs_fear()
