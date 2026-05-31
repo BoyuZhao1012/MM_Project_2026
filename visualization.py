@@ -5,7 +5,7 @@ All plots save to pics/ directory. Style follows academic publication convention
 
 import numpy as np
 import matplotlib
-matplotlib.use('TkAgg')
+matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 from matplotlib import rcParams
 from matplotlib.font_manager import fontManager
@@ -27,18 +27,6 @@ if _cjk_font:
     rcParams['font.family'] = 'sans-serif'
     rcParams['font.sans-serif'] = [_cjk_font, 'DejaVu Sans']
     rcParams['axes.unicode_minus'] = False
-
-# ============================================================
-# Global plot settings
-# ============================================================
-rcParams['font.size'] = 12
-rcParams['axes.labelsize'] = 13
-rcParams['axes.titlesize'] = 14
-rcParams['legend.fontsize'] = 10
-rcParams['figure.dpi'] = 150
-rcParams['savefig.dpi'] = 300
-rcParams['savefig.bbox'] = 'tight'
-rcParams['lines.linewidth'] = 1.5
 
 # ============================================================
 # Global plot settings
@@ -393,6 +381,41 @@ def plot_nullclines(z_final, r, K, a, h, e, d, f=0,
         ax.set_title(title)
     ax.legend()
     ax.grid(True, alpha=0.3)
+    fig.tight_layout()
+    if filename:
+        fig.savefig(f'pics/{filename}')
+    if show:
+        plt.show()
+    else:
+        plt.close(fig)
+    return fig
+
+
+def plot_stability_map(outcomes, f_range, K_range, title='', filename=None, show=False):
+    """2D heatmap of stability regions in f–K parameter space.
+
+    Parameters
+    ----------
+    outcomes : ndarray of str, shape (len(K_range), len(f_range))
+        Each cell one of: 'stable', 'oscillation', 'predator_extinct', 'collapse'.
+    """
+    label_map = {'stable focus': 0, 'unstable (limit cycle)': 1, 'predator extinct': 2}
+    data = np.array([[label_map.get(outcomes[i, j], -1)
+                      for j in range(len(f_range))]
+                     for i in range(len(K_range))], dtype=float)
+
+    fig, ax = plt.subplots(figsize=(7, 5.5))
+    cmap = plt.cm.get_cmap('RdYlGn', 3)
+    im = ax.pcolormesh(f_range, K_range, data, cmap=cmap, vmin=-0.5, vmax=2.5,
+                       shading='nearest')
+
+    cbar = fig.colorbar(im, ax=ax, ticks=[0, 1, 2])
+    cbar.ax.set_yticklabels(['Stable focus', 'Unstable (limit cycle)', 'Predator extinct'])
+
+    ax.set_xlabel('Fear Intensity f', fontsize=13)
+    ax.set_ylabel('Carrying Capacity K', fontsize=13)
+    if title:
+        ax.set_title(title, fontsize=14)
     fig.tight_layout()
     if filename:
         fig.savefig(f'pics/{filename}')

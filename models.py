@@ -53,7 +53,7 @@ def fear_factor_saturating(y, f0, f1):
     """Saturating fear: 1 - f0*y/(f1 + y).
     恐惧效应随捕食者密度饱和."""
     ff = 1.0 - f0 * y / (f1 + y)
-    return max(ff, 0.0)
+    return np.maximum(ff, 0.0)
 
 
 # ============================================================

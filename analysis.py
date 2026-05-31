@@ -204,17 +204,19 @@ def sensitivity_analysis(base_params, z0, perturb=0.1, t_end=200, dt=0.05):
 
     for i, name in enumerate(param_names):
         p0 = base_params[i]
+        # When p0=0 (e.g. f=0), relative perturbation gives zero step — use absolute fallback
+        step = p0 * perturb if abs(p0) > 1e-10 else perturb
 
-        # +perturb
+        # +step
         p_up = list(base_params)
-        p_up[i] = p0 * (1.0 + perturb)
+        p_up[i] = p0 + step
         t, z = simulate_rk4(fear_system, z0, [0, t_end], dt, tuple(p_up))
         x_up = np.mean(z[burn:, 0])
         y_up = np.mean(z[burn:, 1])
 
-        # -perturb
+        # -step
         p_dn = list(base_params)
-        p_dn[i] = p0 * (1.0 - perturb)
+        p_dn[i] = p0 - step
         t, z = simulate_rk4(fear_system, z0, [0, t_end], dt, tuple(p_dn))
         x_dn = np.mean(z[burn:, 0])
         y_dn = np.mean(z[burn:, 1])
