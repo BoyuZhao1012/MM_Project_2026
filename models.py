@@ -22,6 +22,8 @@ DEFAULT_E = 0.4      # 能量转化效率
 DEFAULT_D = 0.3      # 捕食者自然死亡率
 DEFAULT_F = 1.0      # 恐惧强度系数
 DEFAULT_ALPHA = 0.5  # 记忆衰减/积累速率
+DEFAULT_KAPPA = 0.2  # 恐惧的生理代价系数（恐惧成本模型）
+DEFAULT_SIGMA = 0.1  # 环境噪声强度（随机模型）
 
 
 # ============================================================
@@ -112,6 +114,28 @@ def memory_pred_growth(x, y, e, a, h, d):
 
 
 # ============================================================
+# Model 4: Cost-of-fear model (2D) — fear carries a survival cost
+# ============================================================
+def fearcost_prey_growth(x, y, r, K, a, h, f, kappa):
+    """dx/dt for the cost-of-fear model.
+
+    Two channels by which fear acts on prey:
+      1. reduced reproduction   r*x*(1-x/K)/(1+f*y)   (as in the fear model);
+      2. a direct physiological/foraging cost  -kappa*f*x  — vigilant prey
+         forage less and suffer higher baseline mortality.
+
+    The cost term breaks the persistence of the prey population: for the
+    predator-free sub-system the prey settles at x = K*(1 - kappa*f/r),
+    which reaches zero at the critical fear level  f_c = r / kappa.
+    Beyond f_c the prey population COLLAPSES to extinction.
+    """
+    growth = r * x * (1.0 - x / K) * fear_factor_linear(y, f)
+    cost = kappa * f * x
+    predation = holling_type2(x, a, h) * y
+    return growth - cost - predation
+
+
+# ============================================================
 # ODE system wrappers (return [dx, dy] or [dM, dx, dy])
 # ============================================================
 
@@ -138,6 +162,14 @@ def memory_system(t, z, r, K, a, h, e, d, f, alpha):
     dx = memory_prey_growth(x, y, M, r, K, a, h, f)
     dy = memory_pred_growth(x, y, e, a, h, d)
     return np.array([dM, dx, dy])
+
+
+def fearcost_system(t, z, r, K, a, h, e, d, f, kappa):
+    """2D cost-of-fear system: fear reduces reproduction AND adds mortality."""
+    x, y = max(z[0], 0.0), max(z[1], 0.0)
+    dx = fearcost_prey_growth(x, y, r, K, a, h, f, kappa)
+    dy = base_pred_growth(x, y, e, a, h, d)
+    return np.array([dx, dy])
 
 
 # ============================================================
@@ -182,6 +214,56 @@ def simulate_rk4(system, z0, t_span, dt, params):
     for i in range(n - 1):
         z[i + 1] = rk4_step(system, t[i], z[i], dt, params)
         z[i + 1] = np.maximum(z[i + 1], 0.0)
+
+    return t, z
+
+
+# ============================================================
+# Stochastic integrator: Euler-Maruyama with multiplicative noise
+# ============================================================
+
+def simulate_sde(system, z0, t_span, dt, params, sigma, rng=None):
+    """Integrate the SDE  dz = f(z) dt + sigma * z * dW  (Euler-Maruyama).
+
+    Multiplicative (Itô) environmental noise scales with population density,
+    so noise vanishes as a population approaches extinction — a standard
+    choice for ecological stochasticity.
+
+    Parameters
+    ----------
+    system : callable
+        Deterministic drift f(t, z, *params), as used by simulate_rk4.
+    z0 : array_like
+        Initial condition.
+    t_span : tuple (t_start, t_end)
+    dt : float
+        Time step (also the Euler-Maruyama step).
+    params : tuple
+        Parameters passed to ``system``.
+    sigma : float
+        Noise intensity (per-capita standard deviation rate).
+    rng : np.random.Generator, optional
+        Random generator; if None a fresh default_rng() is used.
+
+    Returns
+    -------
+    time : ndarray
+    z : ndarray (n_steps, n_vars)
+    """
+    if rng is None:
+        rng = np.random.default_rng()
+
+    t = np.arange(t_span[0], t_span[1] + dt, dt)
+    n = len(t)
+    dim = len(z0)
+    z = np.zeros((n, dim))
+    z[0] = z0
+    sqrt_dt = np.sqrt(dt)
+
+    for i in range(n - 1):
+        drift = system(t[i], z[i], *params)
+        noise = sigma * z[i] * rng.standard_normal(dim) * sqrt_dt
+        z[i + 1] = np.maximum(z[i] + drift * dt + noise, 0.0)
 
     return t, z
 
