@@ -88,8 +88,14 @@ MM_Project_2026/
 | Exp3 | `run_exp3()` | `exp3_memory_sweep.pdf`<br>`exp3_fear_vs_memory.pdf` | 记忆效应（3D 模型） |
 | Exp4 | `run_exp4()` | `exp4_phase_portraits.pdf` | 不同 f 值下的相图 |
 | Exp5 | `run_exp5()` | `exp5_bifurcation_f.pdf`<br>`exp5_bifurcation_K.pdf`<br>`exp5_stability_map.pdf` | 分岔图 + f×K 二维稳定性图 |
-| Exp6 | `run_exp6()` | `exp6_lynx_hare.pdf` | 与 Hudson Bay 真实数据对比 |
+| Exp6 | `run_exp6()` | `exp6_lynx_hare.pdf` | 与 Hudson Bay 真实数据对比（定性） |
 | Exp7 | `run_exp7()` | `exp7_nullclines.pdf`<br>`exp7_nullclines_fear.pdf` | 零斜线分析 |
+| **Exp8** 🌟 | `run_exp8()` | `exp8_data_fit.pdf` | **创新①** 真实数据定量参数估计（base vs fear，R²/周期/相位） |
+| **Exp9** 🌟 | `run_exp9()` | `exp9_stochastic.pdf` | **创新②** 随机微分方程（SDE）蒙特卡洛，噪声灭绝风险 |
+| **Exp10** 🌟 | `run_exp10()` | `exp10_fearcost_collapse.pdf` | **创新③** 恐惧生理代价模型，临界 f_c 与种群崩溃 |
+
+> ⚠️ **Exp8 较慢**：多起点最小二乘拟合（24 个随机初值 × 2 模型）约需 **2–3 分钟**。
+> 若只想快速预览，可在 [main.py](main.py) 的 `run_exp8()` 中把 `n_starts` 调小（如 8）。
 
 ## 单独运行某个实验
 
