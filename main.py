@@ -15,18 +15,21 @@ from simulation import (
     experiment_memory_sweep, experiment_bifurcation_fear,
     experiment_bifurcation_K, experiment_phase_portrait,
     compute_steady_state, detect_oscillation,
-    estimate_period, experiment_stability_map
+    estimate_period, experiment_stability_map,
+    experiment_stochastic, stochastic_sample_paths,
+    experiment_fearcost, fearcost_sample_paths
 )
 from visualization import (
     plot_time_series, plot_comparison, plot_phase_portrait,
     plot_phase_multi, plot_fear_sweep_time, plot_bifurcation,
     plot_memory_time, plot_steady_state_vs_fear,
-    plot_nullclines, plot_stability_map
+    plot_nullclines, plot_stability_map,
+    plot_data_fit, plot_stochastic_summary, plot_fearcost_collapse
 )
 from analysis import (
     find_equilibria_base, find_equilibria_fear, stability,
     load_lynx_hare_data, sensitivity_analysis, fit_model_to_data,
-    check_hopf
+    check_hopf, compare_data_fits
 )
 
 os.makedirs('pics', exist_ok=True)
@@ -432,6 +435,93 @@ def run_exp7():
 
 
 # ============================================================
+# Experiment 8: Quantitative fit to real data (INNOVATION)
+# ============================================================
+
+def run_exp8():
+    """Fit base & fear models to lynx-hare data; compare goodness-of-fit."""
+    print("\n" + "=" * 60)
+    print("Experiment 8: Quantitative Parameter Estimation")
+    print("=" * 60)
+    print("  Fitting base & fear models to lynx-hare data (multistart)...")
+
+    base, fear = compare_data_fits(n_starts=24, seed=3)
+
+    for res in (base, fear):
+        print(f"\n  [{res['model']} model]")
+        print(f"    R^2 = {res['r2']:.3f}  (hare {res['r2_hare']:.3f}, "
+              f"lynx {res['r2_lynx']:.3f})   RMSE = {res['rmse']:.2f}")
+        print(f"    period: model {res['period_model']:.1f} yr vs data "
+              f"{res['period_data']:.1f} yr;  predator lag: model "
+              f"{res['lag_model']:.1f} yr vs data {res['lag_data']:.1f} yr")
+        print("    params: " +
+              ", ".join(f"{k}={v:.3f}" for k, v in res['params'].items()))
+
+    plot_data_fit(base, fear,
+                  title='Quantitative Fit to Hudson Bay Lynx-Hare Data',
+                  filename='exp8_data_fit.pdf', show=SHOW)
+    print("\n  -> pics/exp8_data_fit.pdf")
+    return base, fear
+
+
+# ============================================================
+# Experiment 9: Stochastic dynamics under environmental noise (INNOVATION)
+# ============================================================
+
+def run_exp9():
+    """Monte-Carlo SDE study: does fear raise or lower extinction risk?"""
+    print("\n" + "=" * 60)
+    print("Experiment 9: Stochastic Dynamics (Environmental Noise)")
+    print("=" * 60)
+    print("  Running Monte-Carlo SDE ensembles across fear intensities...")
+
+    f_values, ext_prob, cv_prey = experiment_stochastic()
+    t, z_det, paths = stochastic_sample_paths(f=DEFAULT_F)
+
+    print(f"\n  {'f':>5} | {'P(quasi-extinction)':>20} | {'prey CV':>8}")
+    for fv, ep, cv in zip(f_values, ext_prob, cv_prey):
+        print(f"  {fv:>5.1f} | {ep:>20.3f} | {cv:>8.3f}")
+
+    plot_stochastic_summary(f_values, ext_prob, cv_prey, t, z_det, paths,
+                            sample_f=DEFAULT_F,
+                            title='Environmental Noise and Fear: Extinction Risk',
+                            filename='exp9_stochastic.pdf', show=SHOW)
+    print("\n  -> pics/exp9_stochastic.pdf")
+    return f_values, ext_prob, cv_prey
+
+
+# ============================================================
+# Experiment 10: Cost of fear and population collapse (INNOVATION)
+# ============================================================
+
+def run_exp10():
+    """Cost-of-fear model: critical fear f_c beyond which prey collapses."""
+    print("\n" + "=" * 60)
+    print("Experiment 10: Cost of Fear and Population Collapse")
+    print("=" * 60)
+
+    f_range, prey_ss, pred_ss, f_c = experiment_fearcost()
+    samples = fearcost_sample_paths(f_values=(0.0, 2.0, 4.5))
+
+    # Numerically locate prey collapse (prey steady state -> 0)
+    collapsed = np.where(prey_ss < 0.05)[0]
+    f_collapse_num = f_range[collapsed[0]] if len(collapsed) else np.nan
+    # Numerically locate predator extinction
+    pred_gone = np.where(pred_ss < 0.02)[0]
+    f_pred_ext = f_range[pred_gone[0]] if len(pred_gone) else np.nan
+
+    print(f"\n  Analytic prey collapse threshold f_c = r/kappa = {f_c:.2f}")
+    print(f"  Numerical prey collapse near f = {f_collapse_num:.2f}")
+    print(f"  Predator driven extinct near f = {f_pred_ext:.2f}")
+
+    plot_fearcost_collapse(f_range, prey_ss, pred_ss, f_c, samples,
+                           title='Cost of Fear: Predator Extinction then Prey Collapse',
+                           filename='exp10_fearcost_collapse.pdf', show=SHOW)
+    print("  -> pics/exp10_fearcost_collapse.pdf")
+    return f_range, prey_ss, pred_ss, f_c
+
+
+# ============================================================
 # Run all experiments
 # ============================================================
 
@@ -449,6 +539,9 @@ def main():
     run_exp5()   # Bifurcation
     run_exp6()   # Real data comparison
     run_exp7()   # Nullcline analysis
+    run_exp8()   # Quantitative data fit       (innovation)
+    run_exp9()   # Stochastic dynamics         (innovation)
+    run_exp10()  # Cost of fear & collapse     (innovation)
 
     print("\n" + "=" * 60)
     print("All experiments complete. Figures saved to pics/")

@@ -426,6 +426,137 @@ def plot_stability_map(outcomes, f_range, K_range, title='', filename=None, show
     return fig
 
 
+def plot_data_fit(base_res, fear_res, title='', filename=None, show=False):
+    """Overlay fitted base & fear models on the lynx-hare data.
+
+    Two stacked panels (Hare, Lynx) with the data as points and each fitted
+    model as a curve; R^2 is reported in the legend.
+    """
+    years = base_res['years']
+    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(10, 7), sharex=True)
+
+    ax1.plot(years, base_res['hare'], 'o', color='gray', markersize=3,
+             alpha=0.7, label='Hare data')
+    ax1.plot(years, base_res['fit_hare'], '-', color=COLORS['base_prey'],
+             linewidth=1.4, label=f"Base fit ($R^2$={base_res['r2_hare']:.2f})")
+    ax1.plot(years, fear_res['fit_hare'], '--', color=COLORS['fear_prey'],
+             linewidth=1.6, label=f"Fear fit ($R^2$={fear_res['r2_hare']:.2f})")
+    ax1.set_ylabel('Hare (prey)')
+    ax1.legend(loc='upper right', fontsize=9)
+    ax1.grid(True, alpha=0.3)
+
+    ax2.plot(years, base_res['lynx'], 's', color='gray', markersize=3,
+             alpha=0.7, label='Lynx data')
+    ax2.plot(years, base_res['fit_lynx'], '-', color=COLORS['base_pred'],
+             linewidth=1.4, label=f"Base fit ($R^2$={base_res['r2_lynx']:.2f})")
+    ax2.plot(years, fear_res['fit_lynx'], '--', color=COLORS['fear_pred'],
+             linewidth=1.6, label=f"Fear fit ($R^2$={fear_res['r2_lynx']:.2f})")
+    ax2.set_ylabel('Lynx (predator)')
+    ax2.set_xlabel('Year')
+    ax2.legend(loc='upper right', fontsize=9)
+    ax2.grid(True, alpha=0.3)
+
+    if title:
+        fig.suptitle(title, fontsize=14)
+    fig.tight_layout()
+    if filename:
+        fig.savefig(f'pics/{filename}')
+    if show:
+        plt.show()
+    else:
+        plt.close(fig)
+    return fig
+
+
+def plot_stochastic_summary(f_values, ext_prob, cv_prey,
+                            t, z_det, paths, sample_f=1.0,
+                            title='', filename=None, show=False):
+    """Stochastic dynamics: sample paths + extinction-probability/CV vs fear."""
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(13, 4.8))
+
+    # Left: sample stochastic prey trajectories vs deterministic
+    for z in paths:
+        ax1.plot(t, z[:, 0], color=COLORS['prey'], alpha=0.25, linewidth=0.8)
+    ax1.plot(t, z_det[:, 0], color='black', linewidth=1.8,
+             label='Deterministic')
+    ax1.set_xlabel('Time t')
+    ax1.set_ylabel('Prey Density x')
+    ax1.set_title(f'Stochastic Sample Paths (f={sample_f})')
+    ax1.legend(loc='best')
+    ax1.grid(True, alpha=0.3)
+
+    # Right: extinction probability + CV vs fear
+    ax2.plot(f_values, ext_prob, 'o-', color=COLORS['fear_pred'],
+             markersize=6, label='Quasi-extinction prob.')
+    ax2.set_xlabel('Fear Intensity f')
+    ax2.set_ylabel('Quasi-extinction Probability', color=COLORS['fear_pred'])
+    ax2.tick_params(axis='y', labelcolor=COLORS['fear_pred'])
+    ax2.set_ylim(-0.03, 1.03)
+    ax2.grid(True, alpha=0.3)
+
+    ax2b = ax2.twinx()
+    ax2b.plot(f_values, cv_prey, 's--', color=COLORS['prey'],
+              markersize=5, label='Prey CV')
+    ax2b.set_ylabel('Prey CV (std/mean)', color=COLORS['prey'])
+    ax2b.tick_params(axis='y', labelcolor=COLORS['prey'])
+
+    lines1, labels1 = ax2.get_legend_handles_labels()
+    lines2, labels2 = ax2b.get_legend_handles_labels()
+    ax2.legend(lines1 + lines2, labels1 + labels2, loc='upper left', fontsize=9)
+    ax2.set_title('Noise-Induced Risk vs Fear')
+
+    if title:
+        fig.suptitle(title, fontsize=14)
+    fig.tight_layout()
+    if filename:
+        fig.savefig(f'pics/{filename}')
+    if show:
+        plt.show()
+    else:
+        plt.close(fig)
+    return fig
+
+
+def plot_fearcost_collapse(f_range, prey_ss, pred_ss, f_c, samples,
+                           title='', filename=None, show=False):
+    """Cost-of-fear collapse: steady-state vs f (with f_c) + sample paths."""
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(13, 4.8))
+
+    ax1.plot(f_range, prey_ss, '-', color=COLORS['prey'], label='Prey $x^*$')
+    ax1.plot(f_range, pred_ss, '-', color=COLORS['predator'], label='Predator $y^*$')
+    ax1.axvline(f_c, color='red', linestyle='--', linewidth=1.3,
+                label=f'$f_c=r/\\kappa={f_c:.1f}$')
+    ax1.axvspan(f_c, f_range[-1], color='red', alpha=0.08)
+    ax1.text(f_c + 0.1, ax1.get_ylim()[1] * 0.85, 'collapse', color='red',
+             fontsize=10)
+    ax1.set_xlabel('Fear Intensity f')
+    ax1.set_ylabel('Long-run Mean Density')
+    ax1.set_title('Steady State vs Fear (cost-of-fear model)')
+    ax1.legend(loc='best')
+    ax1.grid(True, alpha=0.3)
+
+    cmap = plt.cm.viridis
+    for i, (f, t, z) in enumerate(samples):
+        c = cmap(i / max(len(samples) - 1, 1))
+        ax2.plot(t, z[:, 0], color=c, label=f'f={f:.1f}')
+    ax2.set_xlabel('Time t')
+    ax2.set_ylabel('Prey Density x')
+    ax2.set_title('Prey Trajectories: Persistence vs Collapse')
+    ax2.legend(loc='best')
+    ax2.grid(True, alpha=0.3)
+
+    if title:
+        fig.suptitle(title, fontsize=14)
+    fig.tight_layout()
+    if filename:
+        fig.savefig(f'pics/{filename}')
+    if show:
+        plt.show()
+    else:
+        plt.close(fig)
+    return fig
+
+
 if __name__ == '__main__':
     # Test plots
     t = np.linspace(0, 10, 100)
