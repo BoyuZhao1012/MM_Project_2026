@@ -18,5 +18,10 @@ MeiSai_ref/
 *.vrb
 *.xdv
 
-# Test/scratch outputs
-pics/test_map.pdf
+# Generated outputs (reproducible from source — run `python main.py`)
+# Experiment figures from main.py; keep manual assets like ui_screenshot.png tracked.
+pics/exp*.pdf
+pics/test_*.pdf
+
+# Compiled report (reproducible from report.tex via xelatex)
+report.pdf
