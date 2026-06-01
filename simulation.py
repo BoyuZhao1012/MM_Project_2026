@@ -6,9 +6,10 @@ Parameter sweeps, sensitivity analysis, and experiment runners.
 import numpy as np
 import os
 from models import (
-    base_system, fear_system, memory_system, simulate_rk4,
+    base_system, fear_system, memory_system, fearcost_system,
+    simulate_rk4, simulate_sde,
     DEFAULT_R, DEFAULT_K, DEFAULT_A, DEFAULT_H, DEFAULT_E, DEFAULT_D,
-    DEFAULT_F, DEFAULT_ALPHA
+    DEFAULT_F, DEFAULT_ALPHA, DEFAULT_KAPPA, DEFAULT_SIGMA
 )
 
 
@@ -263,6 +264,94 @@ def experiment_stability_map(f_range, K_range):
                     outcomes[i, j] = 'stable focus'
 
     return outcomes
+
+
+def experiment_stochastic(f_values=None, sigma=DEFAULT_SIGMA, n_runs=180,
+                          t_end=200, dt=0.05, ext_threshold=0.1, seed=0):
+    """Monte-Carlo study of environmental noise across fear intensities.
+
+    For each fear level f, run ``n_runs`` independent SDE realizations of the
+    fear model and measure:
+      - quasi-extinction probability (prey or predator drops below
+        ``ext_threshold`` after burn-in);
+      - coefficient of variation (CV = std/mean) of the prey time series,
+        averaged over surviving runs — a measure of fluctuation amplitude.
+
+    Returns (f_values, ext_prob, cv_prey).
+    """
+    if f_values is None:
+        f_values = np.array([0.0, 0.5, 1.0, 1.5, 2.0, 2.5, 3.0])
+    base_params = (DEFAULT_R, DEFAULT_K, DEFAULT_A, DEFAULT_H, DEFAULT_E, DEFAULT_D)
+    z0 = [5.0, 2.0]
+    rng = np.random.default_rng(seed)
+
+    ext_prob, cv_prey = [], []
+    for f in f_values:
+        params = base_params + (f,)
+        n_ext, cvs = 0, []
+        for _ in range(n_runs):
+            t, z = simulate_sde(fear_system, z0, [0, t_end], dt, params, sigma, rng)
+            burn = int(0.5 * len(t))
+            x_ss, y_ss = z[burn:, 0], z[burn:, 1]
+            if x_ss.min() < ext_threshold or y_ss.min() < ext_threshold:
+                n_ext += 1
+            else:
+                cvs.append(np.std(x_ss) / max(np.mean(x_ss), 1e-9))
+        ext_prob.append(n_ext / n_runs)
+        cv_prey.append(np.mean(cvs) if cvs else np.nan)
+
+    return f_values, np.array(ext_prob), np.array(cv_prey)
+
+
+def stochastic_sample_paths(f=DEFAULT_F, sigma=DEFAULT_SIGMA, n_paths=8,
+                            t_end=200, dt=0.05, seed=1):
+    """Return (t, deterministic_z, [stochastic paths]) at one fear level."""
+    base_params = (DEFAULT_R, DEFAULT_K, DEFAULT_A, DEFAULT_H, DEFAULT_E, DEFAULT_D)
+    params = base_params + (f,)
+    z0 = [5.0, 2.0]
+    t, z_det = simulate_rk4(fear_system, z0, [0, t_end], dt, params)
+    rng = np.random.default_rng(seed)
+    paths = [simulate_sde(fear_system, z0, [0, t_end], dt, params, sigma, rng)[1]
+             for _ in range(n_paths)]
+    return t, z_det, paths
+
+
+def experiment_fearcost(f_range=None, kappa=DEFAULT_KAPPA, t_end=600, dt=0.02):
+    """Sweep fear intensity in the cost-of-fear model to locate collapse.
+
+    Records the long-run mean prey and predator densities versus f. As f
+    grows the predator is driven extinct and then, beyond the critical
+    fear level f_c = r/kappa, the prey population itself collapses.
+
+    Returns (f_range, prey_ss, pred_ss, f_c_analytic).
+    """
+    if f_range is None:
+        f_range = np.linspace(0.0, 6.0, 61)
+    base_params = (DEFAULT_R, DEFAULT_K, DEFAULT_A, DEFAULT_H, DEFAULT_E, DEFAULT_D)
+    z0 = [5.0, 2.0]
+
+    prey_ss, pred_ss = [], []
+    for f in f_range:
+        params = base_params + (f, kappa)
+        t, z = simulate_rk4(fearcost_system, z0, [0, t_end], dt, params)
+        burn = int(0.7 * len(t))
+        prey_ss.append(np.mean(z[burn:, 0]))
+        pred_ss.append(np.mean(z[burn:, 1]))
+
+    f_c = DEFAULT_R / kappa
+    return f_range, np.array(prey_ss), np.array(pred_ss), f_c
+
+
+def fearcost_sample_paths(f_values=(0.0, 2.0, 4.5), kappa=DEFAULT_KAPPA,
+                          t_end=300, dt=0.02):
+    """Return [(f, t, z), ...] time series illustrating coexistence vs collapse."""
+    base_params = (DEFAULT_R, DEFAULT_K, DEFAULT_A, DEFAULT_H, DEFAULT_E, DEFAULT_D)
+    out = []
+    for f in f_values:
+        params = base_params + (f, kappa)
+        t, z = simulate_rk4(fearcost_system, [5.0, 2.0], [0, t_end], dt, params)
+        out.append((f, t, z))
+    return out
 
 
 if __name__ == '__main__':

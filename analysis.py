@@ -6,7 +6,7 @@ Computes equilibria, Jacobian eigenvalues, and bifurcation conditions.
 import numpy as np
 import os
 import pandas as pd
-from scipy.optimize import fsolve
+from scipy.optimize import fsolve, least_squares
 from models import (
     base_system, fear_system, memory_system, simulate_rk4,
     DEFAULT_R, DEFAULT_K, DEFAULT_A, DEFAULT_H, DEFAULT_E, DEFAULT_D,
@@ -256,6 +256,173 @@ def fit_model_to_data():
     t_norm = t * (91 / 80)  # scale to ~91 years
 
     return t_norm, z_norm, df
+
+
+# ============================================================
+# Quantitative parameter estimation (fit model to real data)
+# ============================================================
+
+def _dominant_period(series, t, pad=4096):
+    """Dominant oscillation period of a series (zero-padded FFT for resolution).
+
+    Zero-padding refines the frequency grid, avoiding the coarse quantisation
+    of a short (~90 point) record.
+    """
+    x = np.asarray(series, dtype=float)
+    x = x - x.mean()
+    if np.std(x) < 1e-9 or len(x) < 4:
+        return np.nan
+    dt = float(np.mean(np.diff(t)))
+    n = max(pad, len(x))
+    spec = np.abs(np.fft.rfft(x, n=n))
+    freqs = np.fft.rfftfreq(n, d=dt)
+    k = np.argmax(spec[1:]) + 1
+    return 1.0 / freqs[k] if freqs[k] > 1e-12 else np.nan
+
+
+def _phase_lag(prey, pred, t, max_lag_years=6.0):
+    """Within-cycle lag by which the predator peak trails the prey.
+
+    Cross-correlation restricted to |lag| <= max_lag_years to avoid aliasing
+    onto neighbouring cycles. Positive => predator lags prey.
+    """
+    a = np.asarray(prey, float) - np.mean(prey)
+    b = np.asarray(pred, float) - np.mean(pred)
+    if np.std(a) < 1e-9 or np.std(b) < 1e-9:
+        return np.nan
+    dt = float(np.mean(np.diff(t)))
+    corr = np.correlate(b, a, mode='full')
+    lags = np.arange(-len(a) + 1, len(a)) * dt
+    mask = np.abs(lags) <= max_lag_years
+    sub_lags, sub_corr = lags[mask], corr[mask]
+    return float(sub_lags[np.argmax(sub_corr)])
+
+
+def _scaled_trajectory(theta, model_name, t_years, dt=0.2):
+    """Simulate a model with parameter vector theta and sample at data years.
+
+    theta layout (base): [r, K, a, d, s, x0, y0]
+    theta layout (fear): [r, K, a, d, s, x0, y0, f]
+    where s is the time-scale (model time units per calendar year).
+    h and e are fixed at their default ecological values to limit
+    identifiability problems. Model outputs are scaled to data units by
+    the optimal per-species linear factor.
+
+    Returns (mx, my) sampled model prey/predator at each data year, already
+    multiplied by their optimal scale factor — or None if integration fails.
+    """
+    r, K, a, d, s, x0, y0 = theta[:7]
+    h, e = DEFAULT_H, DEFAULT_E
+    t_end_model = s * (t_years[-1] - t_years[0]) + 1e-9
+
+    if model_name == 'base':
+        system = base_system
+        params = (r, K, a, h, e, d)
+    else:
+        f = theta[7]
+        system = fear_system
+        params = (r, K, a, h, e, d, f)
+
+    t_model, z = simulate_rk4(system, [x0, y0], [0, t_end_model], dt, params)
+    sample_t = s * (t_years - t_years[0])
+    mx = np.interp(sample_t, t_model, z[:, 0])
+    my = np.interp(sample_t, t_model, z[:, 1])
+    if not (np.all(np.isfinite(mx)) and np.all(np.isfinite(my))):
+        return None
+    return mx, my
+
+
+def _optimal_scale(model, data):
+    """Best linear factor c minimizing ||c*model - data||^2 (no intercept)."""
+    denom = float(np.dot(model, model))
+    return float(np.dot(model, data) / denom) if denom > 1e-12 else 0.0
+
+
+def fit_model_to_lynx_hare(model_name='fear', n_starts=8, seed=0):
+    """Fit base or fear model to Hudson Bay lynx-hare data by least squares.
+
+    Multistart trust-region least squares over (r, K, a, d, s, x0, y0[, f]).
+    Per-species output is rescaled to data units, so only the *shape* of the
+    dynamics is fitted. Returns a dict with best parameters, the fitted
+    trajectories sampled at each data year, and goodness-of-fit metrics.
+    """
+    df = load_lynx_hare_data()
+    years = df['Year'].values.astype(float)
+    t_years = years - years[0]
+    hare = df['Hare'].values.astype(float)
+    lynx = df['Lynx'].values.astype(float)
+
+    #            r     K     a     d     s     x0    y0   [f]
+    lb = np.array([0.2, 4.0, 0.2, 0.1, 0.1, 0.5, 0.2])
+    ub = np.array([3.0, 30.0, 2.0, 1.2, 1.2, 25.0, 15.0])
+    if model_name == 'fear':
+        lb = np.append(lb, 0.0)
+        ub = np.append(ub, 5.0)
+
+    def residuals(theta):
+        out = _scaled_trajectory(theta, model_name, t_years)
+        if out is None:
+            return np.full(2 * len(years), 1e3)
+        mx, my = out
+        cx = _optimal_scale(mx, hare)
+        cy = _optimal_scale(my, lynx)
+        return np.concatenate([cx * mx - hare, cy * my - lynx])
+
+    rng = np.random.default_rng(seed)
+    best = None
+    for _ in range(n_starts):
+        x0 = lb + rng.random(len(lb)) * (ub - lb)
+        try:
+            res = least_squares(residuals, x0, bounds=(lb, ub),
+                                method='trf', max_nfev=200)
+        except Exception:
+            continue
+        if best is None or res.cost < best.cost:
+            best = res
+
+    theta = best.x
+    mx, my = _scaled_trajectory(theta, model_name, t_years)
+    cx, cy = _optimal_scale(mx, hare), _optimal_scale(my, lynx)
+    fit_hare, fit_lynx = cx * mx, cy * my
+
+    def _metrics(data, fit):
+        ss_res = float(np.sum((data - fit) ** 2))
+        ss_tot = float(np.sum((data - np.mean(data)) ** 2))
+        rmse = np.sqrt(ss_res / len(data))
+        r2 = 1.0 - ss_res / ss_tot if ss_tot > 0 else np.nan
+        return rmse, r2
+
+    rmse_h, r2_h = _metrics(hare, fit_hare)
+    rmse_l, r2_l = _metrics(lynx, fit_lynx)
+    rmse_all, r2_all = _metrics(np.concatenate([hare, lynx]),
+                                np.concatenate([fit_hare, fit_lynx]))
+
+    pnames = ['r', 'K', 'a', 'd', 's', 'x0', 'y0']
+    if model_name == 'fear':
+        pnames.append('f')
+    params = dict(zip(pnames, theta))
+
+    return {
+        'model': model_name,
+        'params': params,
+        'years': years,
+        'hare': hare, 'lynx': lynx,
+        'fit_hare': fit_hare, 'fit_lynx': fit_lynx,
+        'rmse_hare': rmse_h, 'r2_hare': r2_h,
+        'rmse_lynx': rmse_l, 'r2_lynx': r2_l,
+        'rmse': rmse_all, 'r2': r2_all,
+        'period_data': _dominant_period(hare, years),
+        'period_model': _dominant_period(fit_hare, years),
+        'lag_data': _phase_lag(hare, lynx, years),
+        'lag_model': _phase_lag(fit_hare, fit_lynx, years),
+    }
+
+
+def compare_data_fits(n_starts=24, seed=0):
+    """Fit both base and fear models; return both result dicts."""
+    base = fit_model_to_lynx_hare('base', n_starts=n_starts, seed=seed)
+    fear = fit_model_to_lynx_hare('fear', n_starts=n_starts, seed=seed)
+    return base, fear
 
 
 if __name__ == '__main__':
