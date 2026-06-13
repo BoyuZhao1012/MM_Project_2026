@@ -202,6 +202,38 @@ def experiment_phase_portrait(model_name='fear', f_values=None):
     return results
 
 
+def experiment_extinction_risk_grid(f_values=None, alpha_values=None,
+                                    threshold=0.2, t_end=120, dt=0.05):
+    """Scan fear strength and memory rate for low-prey extinction risk.
+
+    The memory model uses z = [M, x, y].  After a burn-in period, we record
+    the minimum prey density and mark a parameter pair as high risk if
+    min(x) < threshold.
+
+    Returns
+    -------
+    f_values, alpha_values, min_prey, risk_mask, threshold
+    """
+    if f_values is None:
+        f_values = np.linspace(0.0, 5.0, 25)
+    if alpha_values is None:
+        alpha_values = np.linspace(0.05, 2.5, 25)
+
+    base_params = (DEFAULT_R, DEFAULT_K, DEFAULT_A, DEFAULT_H, DEFAULT_E, DEFAULT_D)
+    z0 = np.array([0.0, 5.0, 2.0])
+    min_prey = np.zeros((len(alpha_values), len(f_values)))
+
+    for i, alpha in enumerate(alpha_values):
+        for j, f in enumerate(f_values):
+            params = base_params + (f, alpha)
+            t, z = simulate_rk4(memory_system, z0, [0, t_end], dt, params)
+            burn = int(0.3 * len(t))
+            min_prey[i, j] = np.min(z[burn:, 1])
+
+    risk_mask = min_prey < threshold
+    return f_values, alpha_values, min_prey, risk_mask, threshold
+
+
 if __name__ == '__main__':
     os.makedirs('pics', exist_ok=True)
     t, z_base, z_fear = experiment_base_vs_fear()

@@ -69,8 +69,8 @@ def find_equilibria_fear(r, K, a, h, e, d, f):
 
             try:
                 sol = fsolve(F, [x_guess, y_guess], maxfev=1000, xtol=1e-12)
-                if sol[0] > 1e-8 and sol[1] > 1e-8 and sol[0] < K:
-                    eqs.append((float(sol[0]), float(sol[1])))
+                if sol[0] > 1e-8 and sol[1] > 1e-8 and sol[0] < K: # type: ignore
+                    eqs.append((float(sol[0]), float(sol[1]))) # type: ignore
             except Exception:
                 pass
 

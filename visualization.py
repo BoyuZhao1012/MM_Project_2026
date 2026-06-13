@@ -218,7 +218,7 @@ def plot_phase_multi(results, f_values, title='', filename=None, show=True):
 def plot_fear_sweep_time(results, f_values, title='', filename=None, show=True):
     """Overlay time series for different f values."""
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 4.5))
-    cmap = plt.cm.viridis
+    cmap = plt.cm.viridis # type: ignore
 
     for i, (t, z) in enumerate(results):
         if z.shape[0] < z.shape[1]:
@@ -338,6 +338,45 @@ def plot_steady_state_vs_fear(f_values, means_x, means_y, stds_x, stds_y,
     ax2.set_xlabel('Fear Intensity f')
     ax2.set_ylabel('Steady-state Predator')
     ax2.grid(True, alpha=0.3)
+
+    if title:
+        fig.suptitle(title, fontsize=14)
+    fig.tight_layout()
+    if filename:
+        fig.savefig(f'pics/{filename}')
+    if show:
+        plt.show()
+    else:
+        plt.close(fig)
+    return fig
+
+
+def plot_extinction_risk_heatmap(f_values, alpha_values, min_prey,
+                                 risk_mask, threshold=0.5,
+                                 title='', filename=None, show=True):
+    """Plot a two-parameter risk map for the memory model."""
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 4.8))
+    extent = [f_values[0], f_values[-1], alpha_values[0], alpha_values[-1]]
+
+    im1 = ax1.imshow(min_prey, origin='lower', aspect='auto', extent=extent,
+                     cmap='viridis')
+    ax1.contour(f_values, alpha_values, min_prey, levels=[threshold],
+                colors='white', linewidths=1.6)
+    ax1.set_xlabel('Fear Intensity f')
+    ax1.set_ylabel('Memory Rate α')
+    ax1.set_title('Minimum Prey Density')
+    cbar = fig.colorbar(im1, ax=ax1)
+    cbar.set_label('min x after burn-in')
+
+    im2 = ax2.imshow(risk_mask.astype(float), origin='lower', aspect='auto',
+                     extent=extent, cmap='Reds', vmin=0, vmax=1)
+    ax2.contour(f_values, alpha_values, min_prey, levels=[threshold],
+                colors='black', linewidths=1.4)
+    ax2.set_xlabel('Fear Intensity f')
+    ax2.set_ylabel('Memory Rate α')
+    ax2.set_title(f'High-risk Region (min x < {threshold})')
+    cbar2 = fig.colorbar(im2, ax=ax2, ticks=[0, 1])
+    cbar2.ax.set_yticklabels(['Low risk', 'High risk'])
 
     if title:
         fig.suptitle(title, fontsize=14)

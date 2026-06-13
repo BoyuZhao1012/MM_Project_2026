@@ -14,13 +14,14 @@ from simulation import (
     experiment_base_vs_fear, experiment_fear_sweep,
     experiment_memory_sweep, experiment_bifurcation_fear,
     experiment_bifurcation_K, experiment_phase_portrait,
+    experiment_extinction_risk_grid,
     compute_steady_state, detect_oscillation
 )
 from visualization import (
     plot_time_series, plot_comparison, plot_phase_portrait,
     plot_phase_multi, plot_fear_sweep_time, plot_bifurcation,
     plot_memory_time, plot_steady_state_vs_fear,
-    plot_nullclines
+    plot_nullclines, plot_extinction_risk_heatmap
 )
 from analysis import (
     find_equilibria_base, find_equilibria_fear, stability,
@@ -214,10 +215,33 @@ def run_exp5():
 
 
 # ============================================================
-# Experiment 6: Comparison with real lynx-hare data
+# Experiment 6: Two-parameter extinction risk map
 # ============================================================
 
 def run_exp6():
+    """Scan fear strength and memory rate for low-prey risk."""
+    print("\n" + "=" * 60)
+    print("Experiment 6: Two-Parameter Extinction Risk Map")
+    print("=" * 60)
+
+    f_vals, alpha_vals, min_prey, risk_mask, threshold = experiment_extinction_risk_grid()
+    plot_extinction_risk_heatmap(
+        f_vals, alpha_vals, min_prey, risk_mask, threshold=threshold,
+        title='Extinction Risk Map: Fear Intensity vs Memory Rate',
+        filename='exp6_extinction_risk_heatmap.pdf', show=SHOW
+    )
+    risk_ratio = 100.0 * np.mean(risk_mask)
+    print("  -> pics/exp6_extinction_risk_heatmap.pdf")
+    print(f"  High-risk threshold: min prey density x < {threshold}")
+    print(f"  High-risk parameter ratio: {risk_ratio:.1f}%")
+    return f_vals, alpha_vals, min_prey, risk_mask
+
+
+# ============================================================
+# Experiment 7: Comparison with real lynx-hare data
+# ============================================================
+
+def run_exp7():
     """Compare model with real Hudson Bay lynx-hare data."""
     print("\n" + "=" * 60)
     print("Experiment 6: Comparison with Lynx-Hare Data")
@@ -265,10 +289,10 @@ def run_exp6():
 
 
 # ============================================================
-# Experiment 7: Nullcline analysis
+# Experiment 8: Nullcline analysis
 # ============================================================
 
-def run_exp7():
+def run_exp8():
     """Nullcline plots for base model."""
     print("\n" + "=" * 60)
     print("Experiment 7: Nullcline Analysis")
@@ -366,8 +390,9 @@ def main():
     run_exp3()   # Memory effect
     run_exp4()   # Phase portraits
     run_exp5()   # Bifurcation
-    run_exp6()   # Real data comparison
-    run_exp7()   # Nullcline analysis
+    run_exp6()   # Two-parameter risk map
+    run_exp7()   # Real data comparison
+    run_exp8()   # Nullcline analysis
 
     print("\n" + "=" * 60)
     print("All experiments complete. Figures saved to pics/")
