@@ -244,7 +244,7 @@ def run_exp6():
 def run_exp7():
     """Compare model with real Hudson Bay lynx-hare data."""
     print("\n" + "=" * 60)
-    print("Experiment 6: Comparison with Lynx-Hare Data")
+    print("Experiment 7: Comparison with Lynx-Hare Data")
     print("=" * 60)
 
     df = load_lynx_hare_data()
