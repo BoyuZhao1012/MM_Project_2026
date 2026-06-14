@@ -7,10 +7,12 @@ Usage: python UI.py
 
 import numpy as np
 import tkinter as tk
+import tkinter.font as tkfont
 from tkinter import ttk, messagebox, filedialog
 import matplotlib
 matplotlib.use('TkAgg')
-from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolbar2Tk
+from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+from matplotlib.backends._backend_tk import NavigationToolbar2Tk
 from matplotlib.figure import Figure
 import sys
 import os
@@ -31,6 +33,8 @@ class PredatorPreyGUI:
         self.root = root
         self.root.title("捕食者-猎物恐惧效应模型 | Predator-Prey with Fear Effect")
         self.root.geometry("1200x800")
+        self.font_family = self._pick_ui_font()
+        self._configure_fonts()
 
         # Model state
         self.current_model = 'fear'  # 'base', 'fear', 'memory'
@@ -39,6 +43,52 @@ class PredatorPreyGUI:
         self.result = None
 
         self._build_ui()
+
+    def _pick_ui_font(self):
+        """Choose a clean CJK-capable font available on the current system."""
+        available = set(tkfont.families(self.root))
+        for family in ('Microsoft YaHei UI', 'Microsoft YaHei', 'Segoe UI', 'SimHei'):
+            if family in available:
+                return family
+        return 'TkDefaultFont'
+
+    def _configure_fonts(self):
+        """Apply a consistent font family to Tk, ttk, and embedded plots."""
+        self.fonts = {
+            'base': (self.font_family, 10),
+            'small': (self.font_family, 9),
+            'heading': (self.font_family, 10, 'bold'),
+            'top': (self.font_family, 11),
+        }
+
+        for name in (
+            'TkDefaultFont', 'TkTextFont', 'TkFixedFont', 'TkMenuFont',
+            'TkHeadingFont', 'TkCaptionFont', 'TkSmallCaptionFont',
+            'TkIconFont', 'TkTooltipFont'
+        ):
+            try:
+                tkfont.nametofont(name).configure(family=self.font_family, size=10)
+            except tk.TclError:
+                pass
+        try:
+            tkfont.nametofont('TkHeadingFont').configure(weight='bold')
+        except tk.TclError:
+            pass
+
+        style = ttk.Style(self.root)
+        style.configure('.', font=self.fonts['base'])
+        style.configure('TLabel', font=self.fonts['base'])
+        style.configure('TButton', font=self.fonts['base'], padding=(8, 4))
+        style.configure('TEntry', font=self.fonts['base'])
+        style.configure('TCombobox', font=self.fonts['base'])
+        style.configure('TLabelframe.Label', font=self.fonts['heading'])
+        style.configure('TNotebook.Tab', font=self.fonts['base'], padding=(8, 4))
+        self.root.option_add('*Font', self.fonts['base'])
+
+        matplotlib.rcParams['font.sans-serif'] = [
+            self.font_family, 'Microsoft YaHei', 'SimHei', 'DejaVu Sans'
+        ]
+        matplotlib.rcParams['axes.unicode_minus'] = False
 
     # ============================================================
     # UI Construction
@@ -49,7 +99,7 @@ class PredatorPreyGUI:
         top_frame = ttk.Frame(self.root, padding=5)
         top_frame.pack(fill=tk.X, side=tk.TOP)
 
-        ttk.Label(top_frame, text="模型选择:", font=('Arial', 11)).pack(side=tk.LEFT, padx=5)
+        ttk.Label(top_frame, text="模型选择:", font=self.fonts['top']).pack(side=tk.LEFT, padx=5)
         self.model_combo = ttk.Combobox(top_frame, values=['base', 'fear', 'memory'],
                                         state='readonly', width=10)
         self.model_combo.set('fear')
@@ -75,7 +125,7 @@ class PredatorPreyGUI:
         left_frame = ttk.LabelFrame(main_frame, text="模型参数 Parameters", padding=8)
         left_frame.pack(side=tk.LEFT, fill=tk.Y, padx=(0, 5))
 
-        param_canvas = tk.Canvas(left_frame, width=280)
+        param_canvas = tk.Canvas(left_frame, width=300, highlightthickness=0)
         param_scrollbar = ttk.Scrollbar(left_frame, orient=tk.VERTICAL, command=param_canvas.yview)
         self.param_frame = ttk.Frame(param_canvas)
         self.param_frame.bind('<Configure>',
@@ -102,7 +152,7 @@ class PredatorPreyGUI:
             frame = ttk.Frame(self.param_frame)
             frame.pack(fill=tk.X, pady=2)
 
-            ttk.Label(frame, text=label, font=('Arial', 9)).pack(anchor=tk.W)
+            ttk.Label(frame, text=label, font=self.fonts['small']).pack(anchor=tk.W)
 
             var = tk.DoubleVar(value=default)
             self.param_vars[key] = var
@@ -118,7 +168,7 @@ class PredatorPreyGUI:
 
         # Initial conditions
         init_label = ttk.Label(self.param_frame, text="初始条件 Initial Conditions",
-                               font=('Arial', 10, 'bold'))
+                               font=self.fonts['heading'])
         init_label.pack(anchor=tk.W)
 
         init_params = [
@@ -129,7 +179,7 @@ class PredatorPreyGUI:
         for key, label, default, vmin, vmax in init_params:
             frame = ttk.Frame(self.param_frame)
             frame.pack(fill=tk.X, pady=2)
-            ttk.Label(frame, text=label, font=('Arial', 9)).pack(anchor=tk.W)
+            ttk.Label(frame, text=label, font=self.fonts['small']).pack(anchor=tk.W)
             var = tk.DoubleVar(value=default)
             self.init_vars[key] = var
             ttk.Scale(frame, from_=vmin, to=vmax, variable=var,
@@ -140,7 +190,7 @@ class PredatorPreyGUI:
         ttk.Separator(self.param_frame, orient=tk.HORIZONTAL).pack(fill=tk.X, pady=8)
 
         ttk.Label(self.param_frame, text="仿真设置 Simulation Settings",
-                  font=('Arial', 10, 'bold')).pack(anchor=tk.W)
+                  font=self.fonts['heading']).pack(anchor=tk.W)
 
         frame = ttk.Frame(self.param_frame)
         frame.pack(fill=tk.X, pady=2)
@@ -155,7 +205,8 @@ class PredatorPreyGUI:
         ttk.Label(frame, text="时间步长 dt").pack(anchor=tk.W)
         self.dt_var = tk.DoubleVar(value=0.01)
         vals = [0.001, 0.005, 0.01, 0.02, 0.05, 0.1]
-        combo = ttk.Combobox(frame, values=vals, textvariable=self.dt_var, width=7)
+        str_vals = [format(v, '.3f') for v in vals]
+        combo = ttk.Combobox(frame, values=str_vals, textvariable=self.dt_var, width=7)
         combo.pack(side=tk.RIGHT)
 
         # --- Right plot area ---
@@ -417,7 +468,7 @@ class PredatorPreyGUI:
         win.title("参数扫描 Parameter Sweep")
         win.geometry("500x350")
 
-        ttk.Label(win, text="选择扫描参数和范围", font=('Arial', 11)).pack(pady=8)
+        ttk.Label(win, text="选择扫描参数和范围", font=self.fonts['top']).pack(pady=8)
 
         frame = ttk.Frame(win, padding=10)
         frame.pack(fill=tk.BOTH, expand=True)
@@ -475,7 +526,7 @@ class PredatorPreyGUI:
                 # Run sweep
                 import matplotlib.pyplot as plt
                 fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(11, 4.5))
-                cmap = plt.cm.viridis
+                cmap = plt.cm.viridis # type: ignore
 
                 for i, pv in enumerate(p_vals):
                     pl = list(params_base)

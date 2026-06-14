@@ -17,14 +17,16 @@ from simulation import (
     compute_steady_state, detect_oscillation,
     estimate_period, experiment_stability_map,
     experiment_stochastic, stochastic_sample_paths,
-    experiment_fearcost, fearcost_sample_paths
+    experiment_fearcost, fearcost_sample_paths,
+    experiment_extinction_risk_grid
 )
 from visualization import (
     plot_time_series, plot_comparison, plot_phase_portrait,
     plot_phase_multi, plot_fear_sweep_time, plot_bifurcation,
     plot_memory_time, plot_steady_state_vs_fear,
     plot_nullclines, plot_stability_map,
-    plot_data_fit, plot_stochastic_summary, plot_fearcost_collapse
+    plot_data_fit, plot_stochastic_summary, plot_fearcost_collapse,
+    plot_extinction_risk_heatmap
 )
 from analysis import (
     find_equilibria_base, find_equilibria_fear, stability,
@@ -522,6 +524,30 @@ def run_exp10():
 
 
 # ============================================================
+# Experiment 11: Two-parameter (fear x memory) extinction risk map
+# ============================================================
+
+def run_exp11():
+    """Scan fear strength and memory rate for low-prey extinction risk."""
+    print("\n" + "=" * 60)
+    print("Experiment 11: Two-Parameter Extinction Risk Map (f x alpha)")
+    print("=" * 60)
+
+    f_vals, alpha_vals, min_prey, risk_mask, threshold = experiment_extinction_risk_grid()
+    plot_extinction_risk_heatmap(
+        f_vals, alpha_vals, min_prey, risk_mask, threshold=threshold,
+        title='Extinction Risk Map: Fear Intensity vs Memory Rate',
+        filename='exp11_extinction_risk_heatmap.pdf', show=SHOW
+    )
+    risk_ratio = 100.0 * np.mean(risk_mask)
+    print(f"  min prey density range: {min_prey.min():.3f} - {min_prey.max():.3f}")
+    print(f"  High-risk threshold: min prey density x < {threshold}")
+    print(f"  High-risk parameter ratio: {risk_ratio:.1f}%")
+    print("  -> pics/exp11_extinction_risk_heatmap.pdf")
+    return f_vals, alpha_vals, min_prey, risk_mask
+
+
+# ============================================================
 # Run all experiments
 # ============================================================
 
@@ -542,6 +568,7 @@ def main():
     run_exp8()   # Quantitative data fit       (innovation)
     run_exp9()   # Stochastic dynamics         (innovation)
     run_exp10()  # Cost of fear & collapse     (innovation)
+    run_exp11()  # 2D fear x memory risk map   (team contribution)
 
     print("\n" + "=" * 60)
     print("All experiments complete. Figures saved to pics/")
