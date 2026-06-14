@@ -4,38 +4,39 @@
 
 | 工具 | 版本要求 | 说明 |
 |------|----------|------|
-| Python | 3.10+ | 通过 uv 管理 |
-| uv | 任意 | 虚拟环境 + 依赖管理 |
+| Python | 3.10 | 通过 conda 管理 |
+| conda | 任意 | 虚拟环境 + 依赖管理 |
 | XeLaTeX | 任意 | 编译报告（ctexart） |
 
 ## 快速上手
 
 ### 1. 创建虚拟环境并安装依赖
 
-```powershell
-uv sync
+```bash
+conda env create -f environment.yml
+conda activate predator-prey-fear
 ```
 
-依赖列表见 `pyproject.toml`（numpy, scipy, matplotlib, pandas, pillow）。
+依赖见 `environment.yml`（numpy, scipy, matplotlib, pandas, tk）。
 
 ### 2. 运行所有实验，生成图表
 
-```powershell
-.\.venv\Scripts\python.exe main.py
+```bash
+python main.py
 ```
 
 图表保存到 `pics/`，终端输出各实验的数值结果。
 
 带图形窗口预览（需要桌面环境）：
 
-```powershell
-.\.venv\Scripts\python.exe main.py --show
+```bash
+python main.py --show
 ```
 
 ### 3. 启动交互式 GUI
 
-```powershell
-.\.venv\Scripts\python.exe UI.py
+```bash
+python UI.py
 ```
 
 界面包含参数滑块、时间序列/相图/分岔分析三个标签页。
@@ -107,8 +108,8 @@ run_exp5()
 
 ## 常见问题
 
-**Q: `python` 命令找不到（Windows Store 跳转）**  
-A: 始终用 `.\.venv\Scripts\python.exe` 而非裸 `python`。
+**Q: `python` 命令找不到 / 用错环境**  
+A: 先 `conda activate predator-prey-fear` 激活环境，再运行 `python`。
 
 **Q: LaTeX 图序号显示 `??`**  
 A: 需编译两遍。第一遍写 `.aux`，第二遍读取。

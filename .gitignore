@@ -25,3 +25,9 @@ pics/test_*.pdf
 
 # Compiled report (reproducible from report.tex via xelatex)
 report.pdf
+
+# Submission archives
+*.zip
+*.7z
+*.rar
+*.tar.gz
